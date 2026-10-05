@@ -1,0 +1,12 @@
+services:
+  taskboard:
+    image: ${IMAGE:-thirudocker004/taskboard}:${TAG:-latest}
+    container_name: taskboard
+    ports:
+      - "3001:3000"
+    volumes:
+      - taskboard-data:/data
+    restart: unless-stopped
+
+volumes:
+  taskboard-data:

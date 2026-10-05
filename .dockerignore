@@ -1,0 +1,8 @@
+node_modules
+data
+.git
+Jenkinsfile
+Jenkinsfile.windows
+docker-compose.yml
+README.md
+jenkins

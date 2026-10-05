@@ -1,0 +1,13 @@
+{
+  "name": "taskboard",
+  "version": "1.0.0",
+  "description": "Kanban task board (Express REST API + JSON persistence) for a Jenkins + Docker pipeline",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskBoard</title>
+<style>
+  :root {
+    --paper:#f6f1e7; --card:#fffdf8; --ink:#2b2622; --muted:#7a6f64; --line:#e3d9c8;
+    --accent:#c4552d; --accent-ink:#fff;
+    --low:#5d8a6b; --medium:#b8892b; --high:#c4552d;
+    font-family: "Avenir Next","Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#1e1a17; --card:#2a2521; --ink:#f0e9dd; --muted:#a39888; --line:#3a332d; --accent:#e0714a; --accent-ink:#1e1a17; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); min-height:100vh; }
+  button, input, select { font:inherit; color:inherit; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  header { max-width:68rem; margin:0 auto; padding:1.5rem 1.25rem .5rem; display:flex; flex-wrap:wrap; align-items:end; gap:1rem; justify-content:space-between; }
+  h1 { font-family: Georgia,"Times New Roman",serif; font-size:2rem; margin:0; letter-spacing:-.02em; }
+  #summary { color:var(--muted); font-size:.9rem; }
+
+  form { max-width:68rem; margin:.75rem auto 1rem; padding:0 1.25rem; display:flex; flex-wrap:wrap; gap:.5rem; }
+  form input[type=text] { flex:1 1 16rem; padding:.65rem .8rem; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  select { padding:.65rem .6rem; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  .add { padding:.65rem 1.1rem; border:0; border-radius:8px; background:var(--accent); color:var(--accent-ink); font-weight:600; cursor:pointer; }
+
+  #board { max-width:68rem; margin:0 auto; padding:0 1.25rem 2rem; display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; align-items:start; }
+  .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:.75rem; min-height:8rem; }
+  .col h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:.1rem .25rem .6rem; display:flex; justify-content:space-between; }
+  .card { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--medium); border-radius:8px; padding:.6rem .7rem; margin-bottom:.5rem; }
+  .card.low { border-left-color:var(--low); } .card.high { border-left-color:var(--high); }
+  .title { overflow-wrap:anywhere; margin-bottom:.4rem; }
+  .row { display:flex; align-items:center; gap:.3rem; font-size:.78rem; color:var(--muted); }
+  .row .sp { flex:1; }
+  .row button { border:1px solid var(--line); background:none; border-radius:6px; padding:.15rem .5rem; cursor:pointer; }
+  .row button:disabled { opacity:.3; cursor:default; }
+  .empty { color:var(--muted); font-size:.85rem; padding:.25rem; }
+  #msg { max-width:68rem; margin:0 auto; padding:0 1.25rem 1rem; color:var(--high); min-height:1.2rem; font-size:.9rem; }
+
+  @media (max-width:760px) { #board { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>TaskBoard</h1>
+  <div id="summary">loading…</div>
+</header>
+
+<form id="add">
+  <input type="text" id="title" placeholder="What needs doing?" maxlength="120" aria-label="Task title" required>
+  <select id="priority" aria-label="Priority">
+    <option value="low">Low</option>
+    <option value="medium" selected>Medium</option>
+    <option value="high">High</option>
+  </select>
+  <button class="add">Add task</button>
+</form>
+<div id="msg" role="status"></div>
+
+<main id="board"></main>
+
+<script>
+  const COLS = [['todo','To do'], ['doing','In progress'], ['done','Done']];
+  const $ = (id) => document.getElementById(id);
+  let tasks = [];
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    return res.status === 204 ? null : res.json();
+  }
+  const fail = (e) => { $('msg').textContent = e.message; };
+
+  async function load() {
+    try { tasks = await api('/api/tasks'); $('msg').textContent = ''; render(); } catch (e) { fail(e); }
+  }
+
+  function render() {
+    const board = $('board');
+    board.replaceChildren();
+    COLS.forEach(([status, label], ci) => {
+      const col = document.createElement('section');
+      col.className = 'col';
+      const items = tasks.filter((t) => t.status === status);
+      const h = document.createElement('h2');
+      h.append(label, Object.assign(document.createElement('span'), { textContent: items.length }));
+      col.append(h);
+      if (!items.length) col.append(Object.assign(document.createElement('div'), { className: 'empty', textContent: 'Nothing here' }));
+
+      items.forEach((t) => {
+        const card = document.createElement('div');
+        card.className = `card ${t.priority}`;
+        const title = Object.assign(document.createElement('div'), { className: 'title', textContent: t.title });
+        const row = document.createElement('div');
+        row.className = 'row';
+        const left = btn('←', 'Move left', ci === 0, () => move(t, COLS[ci - 1][0]));
+        const right = btn('→', 'Move right', ci === COLS.length - 1, () => move(t, COLS[ci + 1][0]));
+        const prio = Object.assign(document.createElement('span'), { textContent: t.priority });
+        const sp = Object.assign(document.createElement('span'), { className: 'sp' });
+        const del = btn('Delete', 'Delete task', false, () => remove(t));
+        row.append(left, right, prio, sp, del);
+        card.append(title, row);
+        col.append(card);
+      });
+      board.append(col);
+    });
+    const done = tasks.filter((t) => t.status === 'done').length;
+    $('summary').textContent = `${tasks.length} tasks · ${done} done`;
+  }
+
+  function btn(text, label, disabled, onClick) {
+    const b = document.createElement('button');
+    b.textContent = text; b.title = label; b.setAttribute('aria-label', label);
+    b.disabled = disabled; b.addEventListener('click', onClick);
+    return b;
+  }
+
+  async function move(t, status) { try { await api(`/api/tasks/${t.id}`, { method: 'PATCH', body: { status } }); load(); } catch (e) { fail(e); } }
+  async function remove(t) { try { await api(`/api/tasks/${t.id}`, { method: 'DELETE' }); load(); } catch (e) { fail(e); } }
+
+  $('add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/api/tasks', { method: 'POST', body: { title: $('title').value, priority: $('priority').value } });
+      $('title').value = '';
+      load();
+    } catch (err) { fail(err); }
+  });
+
+  load();
+</script>
+</body>
+</html>
